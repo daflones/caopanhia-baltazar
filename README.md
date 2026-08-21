@@ -1,107 +1,195 @@
-# vinext-starter
+# Cãopanhia Baltazar - Sistema de Doações
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Site de doações para a Cãopanhia Baltazar com integração completa de pagamentos Pix via MercosulPay e Supabase.
 
-## Prerequisites
+## Arquitetura
 
-- Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout`
+- **Framework**: Next.js 16.2.6 com React 19.2.6
+- **Banco de dados**: Supabase/PostgreSQL com RLS (Row Level Security)
+- **Gateway de pagamento**: MercosulPay para cobranças Pix automáticas (>= R$ 5)
+- **Pix manual**: Para valores menores que R$ 5
+- **Deploy**: Docker para EasyPanel
 
-## Sites Lifecycle
+## Arquivos Alterados
 
-The Sites lifecycle CLI runs the locked dependency install before returning this checkout. Edit the source under `app/`, then checkpoint when a coherent milestone is ready to inspect or share. The remote Sites builder runs `npm run build` against the pushed commit. Do not repeat install or build as a normal pre-checkpoint step.
+### Backend
+- `lib/supabase-server.ts` - Cliente Supabase com Service Role (servidor)
+- `lib/mercosulpay.ts` - Serviço MercosulPay com tratamento de erros
+- `app/api/donations/route.ts` - POST /api/donations (criação de doações)
+- `app/api/donations/[referenceId]/status/route.ts` - GET /api/donations/:referenceId/status
+- `app/api/health/route.ts` - GET /api/health (healthcheck)
+- `app/api/webhooks/mercosulpay/route.ts` - POST /api/webhooks/mercosulpay (webhook)
 
-This starter does not use `wrangler.jsonc`.
+### Frontend
+- `app/page.tsx` - Atualizado com integração da API real e polling de status
 
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
+### Banco de dados
+- `supabase/migrations/001_create_donations.sql` - Migration SQL para tabelas donations e webhook_deliveries
 
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
+### Configuração
+- `.env.example` - Variáveis de ambiente de exemplo
+- `Dockerfile` - Configuração Docker para EasyPanel
+- `next.config.ts` - Configurado para output standalone
 
-## Included Shape
+### Testes
+- `tests/donations.test.ts` - Testes unitários para API e validações
 
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+## Migration Supabase
 
-## Workspace Auth Headers
+Para aplicar a migration no Supabase:
 
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
+1. Acesse o painel do Supabase
+2. Vá em SQL Editor
+3. Copie e execute o conteúdo de `supabase/migrations/001_create_donations.sql`
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
+A migration cria:
+- Tabela `donations` com RLS (acesso apenas via Service Role)
+- Tabela `webhook_deliveries` para deduplicação de webhooks
+- Índices de performance
+- Trigger para atualização automática de `updated_at`
 
-Treat the full name as optional and fall back to email when it is absent:
+## Configuração Segura das Chaves
 
-```tsx
-import { headers } from "next/headers";
+### Variáveis de Ambiente
 
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
+Copie `.env.example` para `.env` e configure as variáveis:
 
-  const displayName = fullName ?? email;
-  // ...
-}
+```env
+NODE_ENV=production
+PORT=3000
+APP_URL=https://doecaopanhiabaltazar.com.br
+
+# Supabase
+SUPABASE_URL=your_supabase_url_here
+SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+
+# MercosulPay
+MERCOSULPAY_API_URL=https://mercosulpay.com/api/public/v1
+MERCOSULPAY_API_KEY=otp_test_your_api_key_here
+MERCOSULPAY_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+
+# Pix Manual
+MANUAL_PIX_KEY=21968053672
+MANUAL_PIX_KEY_TYPE=phone
+AUTOMATIC_PIX_MIN_AMOUNT=5.00
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+**IMPORTANTE**:
+- Configure as variáveis diretamente no EasyPanel e no ambiente local
+- NUNCA cole Service Role, chave MercosulPay ou segredo de webhook no chat
+- O `.env` já está no `.gitignore`
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Execução Local
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+```bash
+# Instalar dependências
+npm install
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+# Configurar .env com as variáveis necessárias
+cp .env.example .env
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+# Executar em desenvolvimento
+npm run dev
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+# Build para produção
+npm run build
 
-## Diagnostic Commands
+# Executar em produção
+npm start
+```
 
-- `npm run install:ci`: perform the one bounded lockfile install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build the deployable Sites artifact
-- `npm run start`: start the built Vinext application
-- `npm test`: build and verify the rendered development-preview metadata
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+## Testes
 
-Use build commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
+```bash
+# Executar testes
+node --test tests/donations.test.ts
 
-The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
+# Com variável de ambiente para API URL
+TEST_API_URL=http://localhost:3000 node --test tests/donations.test.ts
+```
 
-## Learn More
+Testes implementados:
+- Validação de valores inválidos (zero, negativo, muitas casas decimais)
+- Fluxo manual Pix para 4.99
+- Fluxo MercosulPay para 5.00
+- Verificação de assinatura HMAC
+- Validação de timestamp
+- Validação de valores
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## Deploy no EasyPanel
+
+### Build Docker
+
+```bash
+docker build -t caopanhia-baltazar .
+```
+
+### Configuração no EasyPanel
+
+1. Crie um novo serviço no EasyPanel
+2. Use a imagem Docker construída
+3. Configure as variáveis de ambiente no painel
+4. Configure proxy reverso para HTTPS
+5. Healthcheck configurado para `/api/health`
+
+### Domínio e HTTPS
+
+- Domínio de produção: `https://doecaopanhiabaltazar.com.br`
+- Configure o domínio no EasyPanel
+- O EasyPanel gerará certificado SSL automático via Let's Encrypt
+
+## Webhook MercosulPay
+
+### URL do Webhook
+
+```
+https://doecaopanhiabaltazar.com.br/api/webhooks/mercosulpay
+```
+
+### Cadastro no Painel MercosulPay
+
+1. Acesse o painel da MercosulPay
+2. Vá em configurações de webhook
+3. Cadastre a URL acima
+4. Configure o segredo do webhook (MERCOSULPAY_WEBHOOK_SECRET)
+
+### Homologação
+
+Use chaves `otp_test_` para homologação. Não realize pagamentos reais durante os testes.
+
+### Troca para Produção
+
+Somente após autorização explícita, troque `otp_test_` por `otp_live_` nas variáveis de ambiente.
+
+## Regras de Valores
+
+### Valores abaixo de R$ 5,00
+- Não chama API MercosulPay
+- Cria registro no Supabase como `awaiting_manual_payment`
+- Retorna chave Pix manual para pagamento direto
+- Não há confirmação automática (sem webhook)
+
+### Valores a partir de R$ 5,00
+- Cria cobrança na MercosulPay
+- Exibe QR Code e Pix Copia e Cola
+- Faz polling de status a cada 4 segundos
+- Webhook confirma pagamento automaticamente
+- Mostra mensagem de agradecimento quando confirmado
+
+## Segurança
+
+- Service Role Supabase usado apenas no servidor
+- RLS ativo nas tabelas (negado acesso direto do cliente)
+- Validação de assinatura HMAC-SHA256 no webhook
+- Deduplicação por delivery_id e transaction_id
+- Rate limit recomendado em produção
+- Nenhum segredo exposto em logs ou respostas
+- Validação rigorosa de valores no backend
+
+## Pré-requisitos
+
+- Node.js >= 22.13.0
+- Conta Supabase configurada
+- Conta MercosulPay com chaves de API
+- Docker para deploy no EasyPanel

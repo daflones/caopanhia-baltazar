@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 
-const values = [10, 20, 30, 50, 100, 200];
+const values = [5, 10, 20, 50, 100, 200];
+const MANUAL_PIX_KEY = "21968053672";
 
 function PawIcon() {
   return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="8" cy="9" r="4"/><circle cx="16" cy="6" r="4"/><circle cx="24" cy="9" r="4"/><circle cx="6" cy="18" r="3.5"/><circle cx="26" cy="18" r="3.5"/><path d="M16 13c-6.2 0-10.5 5-9.2 9.2 1 3.1 4 3.6 6.2 2.6 1.8-.8 4.2-.8 6 0 2.2 1 5.2.5 6.2-2.6C26.5 18 22.2 13 16 13Z"/></svg>;
@@ -12,13 +14,90 @@ export default function Home() {
   const [amount, setAmount] = useState(30);
   const [custom, setCustom] = useState("");
   const [notice, setNotice] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [paymentData, setPaymentData] = useState<any>(null);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
   const donation = useMemo(() => {
     const parsed = Number(custom.replace(",", "."));
     return custom && Number.isFinite(parsed) && parsed > 0 ? parsed : amount;
   }, [amount, custom]);
 
   const closeMenu = () => setMenu(false);
+  const isManualPix = donation > 0 && donation < 5;
+
+  // Polling for payment status
+  useEffect(() => {
+    if (paymentData && paymentData.payment_method === "mercosulpay_pix" && paymentStatus !== "completed" && paymentStatus !== "failed" && paymentStatus !== "expired") {
+      pollingRef.current = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/donations/${paymentData.reference_id}/status`);
+          if (response.ok) {
+            const data = await response.json();
+            setPaymentStatus(data.status);
+            if (data.status === "completed" || data.status === "failed" || data.status === "expired") {
+              if (pollingRef.current) {
+                clearInterval(pollingRef.current);
+                pollingRef.current = null;
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+        }
+      }, 4000);
+    }
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [paymentData, paymentStatus]);
+
+  async function copyPixKey() {
+    await navigator.clipboard.writeText(MANUAL_PIX_KEY);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2500);
+  }
+
+  async function handleDonate() {
+    setLoading(true);
+    setError(null);
+    setPaymentData(null);
+    setPaymentStatus(null);
+
+    try {
+      const response = await fetch("/api/donations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: donation,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Erro ao processar doação" }));
+        throw new Error(errorData.error || "Erro ao processar doação");
+      }
+
+      const data = await response.json();
+      setPaymentData(data);
+      setPaymentStatus(data.status);
+      setNotice(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao processar doação");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <main>
@@ -54,7 +133,7 @@ export default function Home() {
         <div className="donation-intro">
           <span className="section-label">DOAÇÃO VIA PIX</span>
           <h2>Escolha quanto amor você quer transformar em cuidado.</h2>
-          <p>Selecione um valor rápido ou informe outra quantia. Na etapa seguinte, o QR Code Pix será gerado com segurança.</p>
+          <p>Para doações a partir de R$ 5, o QR Code Pix será gerado automaticamente. Para valores menores, mostramos nossa chave Pix direta.</p>
           <ul><li>Ajuda na compra de ração</li><li>Apoia consultas e medicamentos</li><li>Mantém resgates e acolhimentos</li></ul>
         </div>
         <div className="donation-card">
@@ -62,9 +141,55 @@ export default function Home() {
           <div className="value-grid">{values.map(value => <button key={value} className={amount === value && !custom ? "active" : ""} onClick={() => { setAmount(value); setCustom(""); }}>R$ {value}</button>)}</div>
           <label htmlFor="custom">Outro valor</label>
           <div className="money-input"><span>R$</span><input id="custom" inputMode="decimal" placeholder="0,00" value={custom} onChange={e => setCustom(e.target.value.replace(/[^0-9,.]/g, ""))} /></div>
-          <button className="button payment-button" onClick={() => setNotice(true)}>Doar R$ {donation.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} via Pix</button>
+          <button className="button payment-button" disabled={donation <= 0 || loading} onClick={handleDonate}>
+            {loading ? "Processando..." : isManualPix ? "Ver chave Pix para doar" : `Doar R$ ${donation.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} via Pix`}
+          </button>
           <p className="secure-note">Pagamento protegido. Seus dados não ficam armazenados neste site.</p>
-          {notice && <div className="gateway-notice" role="status"><button className="close" aria-label="Fechar" onClick={() => setNotice(false)}>×</button><strong>Pagamento pronto para integração</strong><p>Precisamos conectar a gateway escolhida para gerar o QR Code Pix real.</p><a href="https://wa.me/5521968053672?text=Ol%C3%A1%2C%20quero%20fazer%20uma%20doa%C3%A7%C3%A3o%20para%20a%20C%C3%A3opanhia%20Baltazar" target="_blank" rel="noreferrer">Enquanto isso, fale conosco</a></div>}
+          {error && <div className="error-message" role="alert">{error}</div>}
+          {notice && paymentData && paymentData.payment_method === "manual_pix" && (
+            <div className="gateway-notice manual-pix-notice" role="dialog" aria-modal="true" aria-label="Doação por chave Pix">
+              <button className="close" aria-label="Fechar" onClick={() => setNotice(false)}>×</button>
+              <span className="manual-tag">DOAÇÃO DIRETA</span>
+              <strong>Muito obrigado por escolher ajudar!</strong>
+              <p>Para doar <b>R$ {paymentData.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b>, envie o Pix diretamente para nossa chave de telefone:</p>
+              <div className="pix-key-box"><small>Chave Pix</small><b>{paymentData.pix_key}</b></div>
+              <button className="copy-pix-button" onClick={copyPixKey}>{copied ? "Chave Pix copiada" : "Copiar chave Pix"}</button>
+              <p className="manual-thanks">Mesmo uma pequena contribuição ajuda a levar alimento, cuidado e proteção para quem precisa.</p>
+            </div>
+          )}
+          {notice && paymentData && paymentData.payment_method === "mercosulpay_pix" && paymentStatus !== "completed" && (
+            <div className="gateway-notice" role="status">
+              <button className="close" aria-label="Fechar" onClick={() => { setNotice(false); if (pollingRef.current) clearInterval(pollingRef.current); }}>×</button>
+              <strong>Pagamento automático via Pix</strong>
+              <p>Aguardando pagamento de <b>R$ {paymentData.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b></p>
+              {paymentData.qr_code && (
+                <div style={{ textAlign: 'center', margin: '16px 0' }}>
+                  <QRCodeCanvas 
+                    value={paymentData.qr_code} 
+                    size={200}
+                    level="M"
+                    includeMargin={true}
+                    style={{ borderRadius: '8px' }}
+                  />
+                </div>
+              )}
+              {paymentData.qr_code && (
+                <div className="pix-copy-paste">
+                  <small>Pix Copia e Cola:</small>
+                  <code>{paymentData.qr_code}</code>
+                  <button className="copy-button" onClick={() => { navigator.clipboard.writeText(paymentData.qr_code); }}>Copiar código Pix</button>
+                </div>
+              )}
+              <p className="status-indicator">Status: {paymentStatus === "pending" ? "Aguardando pagamento..." : paymentStatus}</p>
+            </div>
+          )}
+          {notice && paymentData && paymentData.payment_method === "mercosulpay_pix" && paymentStatus === "completed" && (
+            <div className="gateway-notice success-notice" role="status">
+              <button className="close" aria-label="Fechar" onClick={() => setNotice(false)}>×</button>
+              <strong>Doação confirmada!</strong>
+              <p>Muito obrigado por fazer parte dessa corrente de cuidado. Sua contribuição ajuda a Cãopanhia Baltazar a oferecer alimento, proteção, atendimento e uma nova chance aos animais que precisam. Cada doação importa. Cada gesto salva vidas.</p>
+            </div>
+          )}
         </div>
       </section>
 
