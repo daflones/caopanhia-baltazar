@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 
 const values = [5, 10, 20, 50, 100, 200];
-const MANUAL_PIX_KEY = "21968053672";
+const MANUAL_PIX_KEY = "9193672363";
 
 function PawIcon() {
   return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="8" cy="9" r="4"/><circle cx="16" cy="6" r="4"/><circle cx="24" cy="9" r="4"/><circle cx="6" cy="18" r="3.5"/><circle cx="26" cy="18" r="3.5"/><path d="M16 13c-6.2 0-10.5 5-9.2 9.2 1 3.1 4 3.6 6.2 2.6 1.8-.8 4.2-.8 6 0 2.2 1 5.2.5 6.2-2.6C26.5 18 22.2 13 16 13Z"/></svg>;
@@ -212,7 +212,7 @@ export default function Home() {
         <div className="impact-grid"><div><span>01</span><h3>Alimentação</h3><p>Ração e suporte alimentar para animais vulneráveis.</p></div><div><span>02</span><h3>Saúde</h3><p>Consultas, exames, medicamentos e vacinação.</p></div><div><span>03</span><h3>Acolhimento</h3><p>Transporte, higiene, abrigo e recuperação segura.</p></div></div>
       </section>
 
-      <section className="final-cta" id="contato"><div className="paw-seal"><PawIcon /></div><span className="section-label">NÃO PASSE ADIANTE</span><h2>Se essas histórias tocaram você, transforme esse sentimento em ajuda.</h2><p>Doe agora ou fale com a Cãopanhia Baltazar pelo WhatsApp.</p><div><a className="button button-large" href="#doar">Fazer uma doação</a><a className="whatsapp-button" href="https://wa.me/5521968053672?text=Ol%C3%A1%2C%20quero%20ajudar%20a%20C%C3%A3opanhia%20Baltazar" target="_blank" rel="noreferrer">WhatsApp: (21) 96805-3672</a></div></section>
+      <section className="final-cta" id="contato"><div className="paw-seal"><PawIcon /></div><span className="section-label">NÃO PASSE ADIANTE</span><h2>Se essas histórias tocaram você, transforme esse sentimento em ajuda.</h2><p>Doe agora ou fale com a Cãopanhia Baltazar pelo WhatsApp.</p><div><a className="button button-large" href="#doar">Fazer uma doação</a><a className="whatsapp-button" href="https://wa.me/559193672363?text=Ol%C3%A1%2C%20quero%20ajudar%20a%20C%C3%A3opanhia%20Baltazar" target="_blank" rel="noreferrer">WhatsApp: (21) 96805-3672</a></div></section>
 
       <footer><a className="brand footer-brand" href="#inicio"><img src="/logo-caopanhia-baltazar.webp" alt="Cãopanhia Baltazar" /></a><p>Resgate, proteção e cuidado animal.</p><p>© 2026 Cãopanhia Baltazar</p></footer>
       <a className="mobile-donate" href="#doar">Doar agora</a>
