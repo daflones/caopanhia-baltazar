@@ -1,0 +1,18 @@
+[phases.setup]
+nixPkgs = ["nodejs_22", "bash", "coreutils", "gnumake"]
+aptPkgs = ["bash", "coreutils"]
+
+[phases.install]
+cmds = ["chmod +x scripts/*.sh", "npm install"]
+
+[phases.build]
+cmds = ["chmod +x scripts/*.sh", "npm run build"]
+
+[start]
+cmd = "npm run start"
+
+[env]
+NODE_ENV = "production"
+PORT = "3000"
+HOSTNAME = "0.0.0.0"
+WRANGLER_LOG_PATH = ".wrangler/wrangler.log"
